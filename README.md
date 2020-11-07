@@ -1,0 +1,2 @@
+# Scraping
+Skrypt do scrapowania
