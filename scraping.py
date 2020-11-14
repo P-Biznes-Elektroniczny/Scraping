@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 import csv
 import urllib
-
+import pandas as pd
 
 def downloadFile(id, soup):
     soup2 = soup.find("div", class_="m-slider")
@@ -20,7 +20,7 @@ def createProductsFile():
 
     # Zapis do pliku
     with open('products.csv', mode='w', encoding="utf8", newline='') as csvfile:
-        fieldnames = ["Product ID", "Active (0/1)", "Name *", "Categories (x,y,z...)", "Price tax excluded",
+        fieldnames = ["Product ID", "Active (0/1)", "Name", "Categories (x,y,z...)", "Price tax excluded",
                       "Tax rules ID", "Wholesale price", "On sale (0/1)", "Discount amount", "Discount percent",
                       "Discount from (yyyy-mm-dd)", "Discount to (yyyy-mm-dd)", "Reference #", "Supplier reference #",
                       "Supplier", "Manufacturer", "EAN13", "UPC", "Ecotax", "Width", "Height", "Depth", "Weight",
@@ -64,43 +64,36 @@ def createProductsFile():
                     specifications_params = soup2.find_all("dd", class_="m-offerShowData_param js-offerShowData_row")
                     features = ""
                     for k in range(len(specifications_names)):
-                        # print(specifications_names[k].text.replace('\n', ''))
-                        if specifications_names[k].text.replace('\n', '') == "Producent":
-                            features += "Producent:" + specifications_params[k].text.replace('\n', '') + ":" + str(
-                                k) + ","
-                        elif specifications_names[k].text.replace('\n', '') == "Reżyseria":
-                            features += "Reżyseria:" + specifications_params[k].text.replace('\n', ' ') + ":" + str(
-                                k) + ","
-                        elif specifications_names[k].text.replace('\n', '') == "Czas trwania [min]":
-                            features += "Czas trwania [min]:" + specifications_params[k].text.replace('\n',
-                                                                                                      '') + ":" + str(
-                                k) + ","
-                        elif specifications_names[k].text.replace('\n', '') == "Kraj produkcji":
-                            features += "Kraj Produkcji:" + specifications_params[k].text.replace('\n', '').split(",")[
-                                0] + ":" + str(k) + ","
-                        elif specifications_names[k].text.replace('\n', '') == "Rok produkcji":
-                            features += "Rok Produkcji:" + specifications_params[k].text.replace('\n', '') + ":" + str(
-                                k) + ","
 
+                        params = specifications_params[k].find_all("span")
+                        if specifications_names[k].text.replace('\n','') == "Dodatkowo na płycie" and len(params[0].text)>255:
+                            continue
+                        for param in params:
+                            features += specifications_names[k].text.replace('\n', '') + ":" + \
+                            param.text.replace('\n', '').replace('  ', '').replace(':', '').replace('\r', ' ') + ":" + str(k) + "|"
                     price = soup2.find("div", class_="b-ofrBox_cta").find("a")["data-offer-price-net"]
 
                     description = soup2.find("div", class_="widget text_editor")
                     if description is None:
                         description = soup2.find("span", itemprop="description")
                         if description is None:
-                            description = "Description"
+                            description = soup2.find("div", class_="b-offerRWD_descriptionInner js-offerRWD_descriptionInner")
+                            if description is None:
+                                description = "Description"
+                            else:
+                                description = description.find("p").text.replace('\t', '')
                         else:
-                            description = description.text
+                            description = description.text.replace('\t', '')
                     else:
-                        description = description.text
+                        description = description.text.replace('\t', '')
 
                     downloadFile(id, soup2)
 
                     writer.writerow({'Product ID': id,
                                      "Active (0/1)": 1,
-                                     'Name *': name,
-                                     'Categories (x,y,z...)': str(i * 8 + j + 1003) + "," + str(
-                                         1000 + i + 1) + "," + str(1000),
+                                     'Name': name,
+                                     'Categories (x,y,z...)': str(i * 8 + j + 1003) + "|" + str(
+                                         1000 + i + 1) + "|" + str(1000),
                                      'Price tax excluded': str(price),  # str(round(float(price)/1.23, 2)),
                                      'Tax rules ID': 1,
                                      'Wholesale price': round((float(price) / 1.23) * 0.9, 2),
@@ -130,11 +123,18 @@ def createProductsFile():
                     print(id)
                     if a > 3:
                         break
-
+def deleteDuplicates():
+    data = pd.read_csv('products.csv', sep=';',
+                               header=0, encoding='utf8', engine='python')
+    print(data.Name)
+    data.sort_values("Name", inplace=True)
+    print(data.Name)
+    data.drop_duplicates(subset="Name", keep="first", inplace=True)
+    data.to_csv('products.csv', sep=';', index=False)
 
 def main():
-    createProductsFile()
-
+    #createProductsFile()
+    deleteDuplicates()
 
 if __name__ == "__main__":
     main()
