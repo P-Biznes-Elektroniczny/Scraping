@@ -4,39 +4,39 @@ import csv
 import urllib
 import pandas as pd
 
-def downloadFile(id, soup):
+
+def download_file(id, soup):
     soup2 = soup.find("div", class_="m-slider")
     image = "https:" + soup2.find('img').get('src')
-    imagefile = open("images/" + str(id) + ".jpeg", 'wb')
-    imagefile.write(urllib.request.urlopen(image).read())
-    imagefile.close()
+    try:
+        image_file = open("images/" + str(id) + ".jpeg", 'wb')
+        image_file.write(urllib.request.urlopen(image).read())
+        image_file.close()
+    except:
+        print("urllib error")
 
 
-def createProductsFile():
+def delete_duplicates():
+    data = pd.read_csv('products.csv', sep=';', header=0, encoding='utf8', engine='python')
+    data.sort_values("Name", inplace=True)
+    data.drop_duplicates(subset="Name", keep="first", inplace=True)
+    data.to_csv('products.csv', sep=';', index=False)
+
+
+def create_products_file():
+
     categories = ["filmy-dvd", "filmy-blu-ray"]
     subcategories = ["animowanefamilijne", "dokumentalne", "dramat", "fantasysci-fi", "horrorthriller",
                      "komediakomedia-romantyczna", "muzycznemusicale", "sensacyjneprzygodowe"]
+    subsubcategories_names = [["Animowany", "Familijny"], ["Dokumentalny", ""], ["Dramat", ""],
+                              ["Fantasy", "Sciencefiction"],
+                              ["Horror", "Thriller"], ["Komedia", "Romans"], ["Muzyczny", "Musical"],
+                              ["Sensacja", "Przygodowy"]]
     id = 1
 
-    # Zapis do pliku
+    # Save to file
     with open('products.csv', mode='w', encoding="utf8", newline='') as csvfile:
-        fieldnames = ["Product ID", "Active (0/1)", "Name", "Categories (x,y,z...)", "Price tax excluded",
-                      "Tax rules ID", "Wholesale price", "On sale (0/1)", "Discount amount", "Discount percent",
-                      "Discount from (yyyy-mm-dd)", "Discount to (yyyy-mm-dd)", "Reference #", "Supplier reference #",
-                      "Supplier", "Manufacturer", "EAN13", "UPC", "Ecotax", "Width", "Height", "Depth", "Weight",
-                      "Delivery time of in-stock products",
-                      "Delivery time of out-of-stock products with allowed orders", "Quantity", "Minimal quantity",
-                      "Low stock level", "Send me an email", "Visibility", "Additional shipping cost", "Unity",
-                      "Unit price", "Summary", "Description", "Tags (x,y,z...)", "Meta title", "Meta keywords",
-                      "Meta description", "URL rewritten", "Text when in stock", "Text when backorder allowed",
-                      "Available for order (0 = No, 1 = Yes)", "Product available date", "Product creation date",
-                      "Show price (0 = No, 1 = Yes)", "Image URLs (x,y,z...)", "Image alt texts (x,y,z...)",
-                      "Delete existing images(0 = No, 1 = Yes)", "Feature(Name: Value: Position)",
-                      "Available online only(0 = No, 1 = Yes)", "Condition", "Customizable(0 = No, 1 = Yes)",
-                      "Uploadable files (0 = No, 1 = Yes)", "Text fields (0 = No, 1 = Yes)", "Out of stock action",
-                      "Virtual product", "File URL", "Number of allowed downloads", "Expiration date", "Number of days",
-                      "ID / Name of shop", "Advanced stock management", "Depends On Stock", "Warehouse",
-                      "Acessories(x, y, z...)"]
+        fieldnames = ["Id", "Name", "Link", "Categories", "Price", "Wholesale price", "Features", "Description"]
 
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=";")
         writer.writeheader()
@@ -44,97 +44,108 @@ def createProductsFile():
         for i, category in enumerate(categories):
             for j, subcategory in enumerate(subcategories):
                 a = 0
-                # Pobierz html
-                response = requests.get("https://mediamarkt.pl/filmy/" + category + "/" + subcategory)
+                # Download html
+                response = requests.get(
+                    "https://mediamarkt.pl/filmy/" + category + "/" + subcategory + "?sort=0&limit=100&page=1")
 
-                # Sparsuj kod źródłowy
+                # Parse html
                 soup = BeautifulSoup(response.text, 'html.parser')
-                # Szukaj produkty
+
+                # Search for products
                 for product in soup.find_all("div", class_="m-offerBox_box"):
 
                     url = product.find('a', href=True)
 
-                    # Przejdz na strone produktu
+                    # Go to the product page
                     response_2 = requests.get("https://mediamarkt.pl" + url['href'])
 
-                    soup2 = BeautifulSoup(response_2.text, 'html.parser')
+                    # Parse html
+                    soup2 = BeautifulSoup(response_2.text.replace("<br>", "\n"), 'html.parser')
 
+                    # Name
                     name = soup2.find("h1", class_="b-ofr_headDataTitle").text.replace('\n', '').replace('  ', '')
+
+                    # Attributes
                     specifications_names = soup2.find_all("dt", class_="m-offerShowData_name js-offerShowData_row")
                     specifications_params = soup2.find_all("dd", class_="m-offerShowData_param js-offerShowData_row")
-                    features = ""
+
+                    if specifications_params[0] is None:
+                        features = ""
+                    else:
+                        features = "Producent@" + specifications_params[0].text.replace('\n', '') + "|"
+
                     for k in range(len(specifications_names)):
+                        if specifications_names[k].text.replace('\n', '') == "Gatunek":
+                            subsubcategories = specifications_params[k].text.replace('\n', '')
 
                         params = specifications_params[k].find_all("span")
-                        if specifications_names[k].text.replace('\n','') == "Dodatkowo na płycie" and len(params[0].text)>255:
-                            continue
-                        for param in params:
-                            features += specifications_names[k].text.replace('\n', '') + ":" + \
-                            param.text.replace('\n', '').replace('  ', '').replace(':', '').replace('\r', ' ') + ":" + str(k) + "|"
-                    price = soup2.find("div", class_="b-ofrBox_cta").find("a")["data-offer-price-net"]
 
+                        if specifications_names[k].text.replace('\n', '') == "Dodatkowo na płycie" and len(
+                                params[0].text) > 255:
+                            continue
+
+                        for param in params:
+                            features +=specifications_names[k].text.replace('\n', '') + "@" + param.text\
+                                .replace('\n', '').replace('  ', '').replace('\r', ' ')+ "|"
+                    features = features[:-1]
+
+                    # Price
+                    price = soup2.find("div", class_="m-priceBox_price").text.replace('zł', '').replace(' ', '').replace('\n', '').replace(',', '.').replace('-', '0')
+
+                    # Description
                     description = soup2.find("div", class_="widget text_editor")
+
                     if description is None:
                         description = soup2.find("span", itemprop="description")
                         if description is None:
-                            description = soup2.find("div", class_="b-offerRWD_descriptionInner js-offerRWD_descriptionInner")
+                            description = soup2.find("div",
+                                                     class_="b-offerRWD_descriptionInner js-offerRWD_descriptionInner")
                             if description is None:
                                 description = "Description"
                             else:
-                                description = description.find("p").text.replace('\t', '')
+                                description = "<p>" + description.find("p").text.replace('\n', '<br>').replace('\t', ' ').replace('\r', ' ') + "</p>"
                         else:
-                            description = description.text.replace('\t', '')
+                            description = "<p>" + description.text.replace('\n', '<br>').replace('\t', ' ').replace('\r', ' ') + "</p>"
                     else:
-                        description = description.text.replace('\t', '')
+                        description = "<p>" + description.text.replace('\n', '<br>').replace('\t', ' ').replace('\r', ' ') + "</p>"
 
-                    downloadFile(id, soup2)
+                    # Categories
+                    film_category = str(i * 8 + j + 1003) + "|" + str(1000 + i + 1) + "|" + str(1000)
+                    for subsubcategory in subsubcategories.split(','):
+                        subsubcategory = subsubcategory.replace('\n', '').replace(' ', '')
+                        for k, subsubcategory_name in enumerate(subsubcategories_names):
+                            if subsubcategory == subsubcategory_name[0] or subsubcategory == \
+                                    subsubcategory_name[1]:
+                                film_category += "|" + str(i * 8 + k + 1003)
+                    film_category_list = list(dict.fromkeys(film_category.split('|')))
+                    film_category = '|'.join(film_category_list)
 
-                    writer.writerow({'Product ID': id,
-                                     "Active (0/1)": 1,
-                                     'Name': name,
-                                     'Categories (x,y,z...)': str(i * 8 + j + 1003) + "|" + str(
-                                         1000 + i + 1) + "|" + str(1000),
-                                     'Price tax excluded': str(price),  # str(round(float(price)/1.23, 2)),
-                                     'Tax rules ID': 1,
-                                     'Wholesale price': round((float(price) / 1.23) * 0.9, 2),
-                                     'On sale (0/1)': 0,
-                                     'Reference #': 'demo_' + str(id),
-                                     'Supplier reference #': 'demo_' + str(id),  # punkt 13
-                                     'Supplier': "",  # punkt 13
-                                     'Minimal quantity': 1,
-                                     'Send me an email': 0,
-                                     'Visibility': 'both',
-                                     'Additional shipping cost': '',  # punkt 13
-                                     'Summary': 'Film',
-                                     'Description': description,
-                                     'URL rewritten': url['href'].split("/")[-1],  # replace/
-                                     'Text when in stock': "Produkt dostępny",
-                                     'Text when backorder allowed': "Zamówienie dozwolone",
-                                     'Available for order (0 = No, 1 = Yes)': 1,
-                                     'Show price (0 = No, 1 = Yes)': 1,
-                                     'Feature(Name: Value: Position)': features,
-                                     'Available online only(0 = No, 1 = Yes)': 0,
-                                     'Condition': "new",
-                                     'Delete existing images(0 = No, 1 = Yes)': 1,
-                                     'Customizable(0 = No, 1 = Yes)': 1,
+                    # Image
+                    download_file(id, soup2)
+
+                    # Save product in products.csv
+                    writer.writerow({"Id": id,
+                                     "Name": name,
+                                     "Link": url['href'].split("/")[-1],
+                                     "Categories": film_category,
+                                     "Price": str(round(float(price) / 1.23, 4)),
+                                     "Wholesale price": round((float(price) / 1.23) * 0.9, 2),
+                                     "Features": features,
+                                     "Description": description,
                                      })
                     id += 1
                     a += 1
-                    print(id)
-                    if a > 3:
+                    print(id - 1)
+                    # Only 50 products per category
+                    if a > 50:
                         break
-def deleteDuplicates():
-    data = pd.read_csv('products.csv', sep=';',
-                               header=0, encoding='utf8', engine='python')
-    print(data.Name)
-    data.sort_values("Name", inplace=True)
-    print(data.Name)
-    data.drop_duplicates(subset="Name", keep="first", inplace=True)
-    data.to_csv('products.csv', sep=';', index=False)
+
 
 def main():
-    #createProductsFile()
-    deleteDuplicates()
+    
+    create_products_file()
+    delete_duplicates()
+
 
 if __name__ == "__main__":
     main()
