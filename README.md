@@ -1,2 +1,4 @@
 # Scraping
-Skrypt do scrapowania
+Skrypt do scrapowania i jego rezultaty
+Skrypt inicjujący stan produktów
+
